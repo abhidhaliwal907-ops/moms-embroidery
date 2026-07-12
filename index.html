@@ -5,100 +5,182 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mom's Embroidery Resizer</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f7f9fa; padding: 20px; color: #333; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; }
-        button { background: #ff477e; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #e03e6d; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #f4f6f9; padding: 20px; color: #333; }
+        .card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; margin: 40px auto; border: 1px solid #e1e8ed; }
+        h2 { margin-top: 0; color: #2c3e50; }
+        input, select, button { width: 100%; padding: 14px; margin: 12px 0; border-radius: 8px; border: 1px solid #ccd6dd; box-sizing: border-box; font-size: 16px; }
+        select:focus, input:focus { border-color: #3b82f6; outline: none; }
+        button { background: #10b981; color: white; border: none; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #059669; }
+        .status { font-size: 14px; color: #657786; margin-top: 10px; font-style: italic; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>🧵 Mom's DST Resizer</h2>
-    <p>Upload a .dst file, choose a size change, and download the new file.</p>
+    <h2>🧵 Mom's Smart DST Resizer</h2>
+    <p>Upload a .dst file, pick a size, and it will scale the file and adjust the stitches.</p>
     
     <input type="file" id="fileInput" accept=".dst">
     
-    <label for="scale">Scale Size:</label>
+    <label for="scale" style="text-align: left; display: block; font-weight: 500; font-size: 14px; color: #4b5563;">Choose Target Size:</label>
     <select id="scale">
-        <option value="0.90">90% (Smaller)</option>
-        <option value="0.95">95% (Slightly Smaller)</option>
-        <option value="1.05" selected>105% (Slightly Larger)</option>
-        <option value="1.10">110% (Larger)</option>
+        <option value="0.80">80% (Small - Removes stitches)</option>
+        <option value="0.90">90% (Medium Small)</option>
+        <option value="1.10">110% (Medium Large)</option>
+        <option value="1.20">120% (Large - Adds stitches)</option>
     </select>
 
-    <button onclick="resizeDST()">Resize & Download</button>
+    <button onclick="resizeDST()">Process & Download</button>
+    <div id="statusText" class="status">Ready</div>
 </div>
 
 <script>
+// Encodes a relative movement (dx, dy) into the Tajima 3-byte format
+function encodeTajimaStitch(dx, dy, flagByte = 0x03) {
+    let b0 = 0, b1 = 0, b2 = flagByte;
+
+    // Tajima format coordinates use ternary flags
+    if (dx > 0) {
+        if (dx >= 81) { b2 |= 0x04; dx -= 81; }
+        if (dx >= 27) { b1 |= 0x04; dx -= 27; }
+        if (dx >= 9)  { b0 |= 0x04; dx -= 9; }
+        if (dx >= 3)  { b1 |= 0x01; dx -= 3; }
+        if (dx >= 1)  { b0 |= 0x01; dx -= 1; }
+    } else if (dx < 0) {
+        let ax = Math.abs(dx);
+        if (ax >= 81) { b2 |= 0x08; ax -= 81; }
+        if (ax >= 27) { b1 |= 0x08; ax -= 27; }
+        if (ax >= 9)  { b0 |= 0x08; ax -= 9; }
+        if (ax >= 3)  { b1 |= 0x02; ax -= 3; }
+        if (ax >= 1)  { b0 |= 0x02; ax -= 1; }
+    }
+
+    if (dy > 0) {
+        if (dy >= 81) { b2 |= 0x10; dy -= 81; }
+        if (dy >= 27) { b1 |= 0x40; dy -= 27; }
+        if (dy >= 9)  { b0 |= 0x40; dy -= 9; }
+        if (dy >= 3)  { b1 |= 0x10; dy -= 3; }
+        if (dy >= 1)  { b0 |= 0x10; dy -= 1; }
+    } else if (dy < 0) {
+        let ay = Math.abs(dy);
+        if (ay >= 81) { b2 |= 0x20; ay -= 81; }
+        if (ay >= 27) { b1 |= 0x20; ay -= 27; }
+        if (ay >= 9)  { b0 |= 0x80; ay -= 9; }
+        if (ay >= 3)  { b1 |= 0x20; ay -= 3; }
+        if (ay >= 1)  { b0 |= 0x20; ay -= 1; }
+    }
+
+    return [b0, b1, b2];
+}
+
 function resizeDST() {
     const fileInput = document.getElementById('fileInput');
     const scaleFactor = parseFloat(document.getElementById('scale').value);
+    const statusText = document.getElementById('statusText');
     
     if (!fileInput.files[0]) {
         alert("Please upload a .dst file first!");
         return;
     }
 
+    statusText.innerText = "Processing geometry...";
     const file = fileInput.files[0];
     const reader = new FileReader();
 
     reader.onload = function(e) {
         const arrayBuffer = e.target.result;
-        const view = new DataView(arrayBuffer);
-        const bytes = new Uint8Array(arrayBuffer);
+        const oldBytes = new Uint8Array(arrayBuffer);
         
-        // DST files have a 512-byte header, stitches start at byte 512
-        // We loop through the stitch binary data and scale the coordinate offsets
-        for (let i = 512; i < bytes.length; i += 3) {
-            if (i + 2 >= bytes.length) break;
+        // Copy the exact 512-byte header safely
+        let newBytesList = Array.from(oldBytes.subarray(0, 512));
+        
+        // Loop and parse the original stitches
+        let originalStitches = [];
+        for (let i = 512; i < oldBytes.length; i += 3) {
+            if (i + 2 >= oldBytes.length) break;
             
-            // Decode Tajima ternary format stitch coordinates
-            let b0 = bytes[i];
-            let b1 = bytes[i+1];
-            let b2 = bytes[i+2];
+            let b0 = oldBytes[i];
+            let b1 = oldBytes[i+1];
+            let b2 = oldBytes[i+2];
             
-            let dx = 0;
-            let dy = 0;
-            
-            if (b0 & 0x01) dx += 1;
-            if (b0 & 0x02) dx -= 1;
-            if (b0 & 0x04) dx += 9;
-            if (b0 & 0x08) dx -= 9;
-            if (b0 & 0x10) dy += 1;
-            if (b0 & 0x20) dy -= 1;
-            if (b0 & 0x40) dy += 9;
-            if (b0 & 0x80) dy -= 9;
-            
-            if (b1 & 0x01) dx += 3;
-            if (b1 & 0x02) dx -= 3;
-            if (b1 & 0x04) dx += 27;
-            if (b1 & 0x08) dx -= 27;
-            if (b1 & 0x10) dy += 3;
-            if (b1 & 0x20) dy -= 3;
-            if (b1 & 0x40) dy += 27;
-            if (b1 & 0x80) dy -= 27;
-            
-            if (b2 & 0x04) dx += 81;
-            if (b2 & 0x08) dx -= 81;
-            if (b2 & 0x10) dy += 81;
-            if (b2 & 0x20) dy -= 81;
+            // Check for End of Design command
+            if ((b2 & 0xF3) === 0xF3) {
+                originalStitches.push({ dx: 0, dy: 0, type: 'end', rawb2: b2 });
+                break;
+            }
 
-            // Apply scaling factor directly to the directional step
-            let newDx = Math.round(dx * scaleFactor);
-            let newDy = Math.round(dy * scaleFactor);
-            
-            // Re-encode back into the array (Approximation logic for basic resizing)
-            // Note: True density calculation requires rebuilding the stitch layout tree.
+            let dx = 0, dy = 0;
+            if (b0 & 0x01) dx += 1;   if (b0 & 0x02) dx -= 1;
+            if (b0 & 0x04) dx += 9;   if (b0 & 0x08) dx -= 9;
+            if (b0 & 0x10) dy += 1;   if (b0 & 0x20) dy -= 1;
+            if (b0 & 0x40) dy += 9;   if (b0 & 0x80) dy -= 9;
+            if (b1 & 0x01) dx += 3;   if (b1 & 0x02) dx -= 3;
+            if (b1 & 0x04) dx += 27;  if (b1 & 0x08) dx -= 27;
+            if (b1 & 0x10) dy += 3;   if (b1 & 0x20) dy -= 3;
+            if (b1 & 0x40) dy += 27;  if (b1 & 0x80) dy -= 27;
+            if (b2 & 0x04) dx += 81;  if (b2 & 0x08) dx -= 81;
+            if (b2 & 0x10) dy += 81;  if (b2 & 0x20) dy -= 81;
+
+            // Save stitch flags (Jump, normal stitch, color change)
+            let type = 'stitch';
+            if ((b2 & 0x83) === 0x83) type = 'jump';
+            if ((b2 & 0xC3) === 0xC3) type = 'color';
+
+            originalStitches.push({ dx, dy, type, rawb2: b2 });
         }
 
-        // Trigger file download back to the phone
-        const blob = new Blob([bytes], { type: "application/octet-stream" });
+        // Process resizing with adaptive interpolation (Stitch adding/dropping)
+        for (let k = 0; k < originalStitches.length; k++) {
+            let st = originalStitches[k];
+            
+            if (st.type === 'end') {
+                newBytesList.push(0, 0, st.rawb2);
+                break;
+            }
+
+            // Calculate scaled coordinates
+            let newDx = Math.round(st.type === 'stitch' ? st.dx * scaleFactor : st.dx);
+            let newDy = Math.round(st.type === 'stitch' ? st.dy * scaleFactor : st.dy);
+
+            // Handle normal embroidery stitches
+            if (st.type === 'stitch') {
+                let dist = Math.sqrt(newDx*newDx + newDy*newDy);
+
+                // If scaling up makes a stitch too long (e.g., over 12.1mm / 121 units), split it
+                if (scaleFactor > 1.0 && dist > 35) { 
+                    // Add an extra filling stitch midway to increase overall stitch count
+                    let midX = Math.round(newDx / 2);
+                    let midY = Math.round(newDy / 2);
+                    newBytesList.push(...encodeTajimaStitch(midX, midY, st.rawb2 & 0x03));
+                    newBytesList.push(...encodeTajimaStitch(newDx - midX, newDy - midY, st.rawb2 & 0x03));
+                } 
+                // If scaling down makes it way too tight, occasionally skip a stitch to drop stitch count
+                else if (scaleFactor < 1.0 && dist < 12 && k % 5 === 0) {
+                    // Accumulate movements forward so we don't drop position entirely
+                    if (k + 1 < originalStitches.length) {
+                        originalStitches[k+1].dx += st.dx;
+                        originalStitches[k+1].dy += st.dy;
+                    }
+                } 
+                else {
+                    newBytesList.push(...encodeTajimaStitch(newDx, newDy, st.rawb2 & 0x03));
+                }
+            } else {
+                // Keep Jump commands and color changes exactly as they are structure-wise
+                newBytesList.push(...encodeTajimaStitch(newDx, newDy, st.rawb2));
+            }
+        }
+
+        // Output final data back to file
+        const finalArray = new Uint8Array(newBytesList);
+        const blob = new Blob([finalArray], { type: "application/octet-stream" });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = "resized_" + file.name;
+        link.download = "scaled_" + (scaleFactor * 100) + "pct_" + file.name;
         link.click();
+        
+        statusText.innerText = "Saved successfully!";
     };
 
     reader.readAsArrayBuffer(file);
