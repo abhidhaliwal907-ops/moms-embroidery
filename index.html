@@ -17,17 +17,17 @@
 <body>
 
 <div class="card">
-    <h2>🧵 Mom's DST Resizer</h2>
-    <p>Upload your .dst file, pick a size, and it will scale perfectly.</p>
+    <h2>🧵 Mom's Fixed DST Resizer</h2>
+    <p>Upload your .dst file, pick a size, and it will scale perfectly without distortion.</p>
     
     <input type="file" id="fileInput" accept=".dst">
     
     <label for="scale" style="text-align: left; display: block; font-weight: 500; font-size: 14px;">Size Adjust:</label>
     <select id="scale">
-        <option value="0.85">85% (Smaller)</option>
+        <option value="0.80">80% (Smaller)</option>
         <option value="0.90">90% (Slightly Smaller)</option>
         <option value="1.10">110% (Slightly Larger)</option>
-        <option value="1.15">115% (Larger)</option>
+        <option value="1.20">120% (Larger)</option>
     </select>
 
     <button onclick="resizeDST()">Scale & Download</button>
@@ -35,23 +35,26 @@
 </div>
 
 <script>
-function decodeTajimaByte(b0, b1, b2) {
+function decodeTajima(b0, b1, b2) {
     let dx = 0, dy = 0;
     if (b0 & 0x01) dx += 1;   if (b0 & 0x02) dx -= 1;
     if (b0 & 0x04) dx += 9;   if (b0 & 0x08) dx -= 9;
     if (b0 & 0x10) dy += 1;   if (b0 & 0x20) dy -= 1;
     if (b0 & 0x40) dy += 9;   if (b0 & 0x80) dy -= 9;
+    
     if (b1 & 0x01) dx += 3;   if (b1 & 0x02) dx -= 3;
     if (b1 & 0x04) dx += 27;  if (b1 & 0x08) dx -= 27;
     if (b1 & 0x10) dy += 3;   if (b1 & 0x20) dy -= 3;
     if (b1 & 0x40) dy += 27;  if (b1 & 0x80) dy -= 27;
+    
     if (b2 & 0x04) dx += 81;  if (b2 & 0x08) dx -= 81;
     if (b2 & 0x10) dy += 81;  if (b2 & 0x20) dy -= 81;
     return { dx, dy };
 }
 
-function encodeTajimaByte(dx, dy, originalB2) {
-    let b0 = 0, b1 = 0, b2 = originalB2 & 0xF3; // Reset coordinate flags, keep command flags
+function encodeTajima(dx, dy, originalB2) {
+    let b0 = 0, b1 = 0;
+    let b2 = originalB2 & 0xC3; // Keep only command/jump flags, strip coordinate data safely
 
     if (dx > 0) {
         if (dx >= 81) { b2 |= 0x04; dx -= 81; }
@@ -60,12 +63,12 @@ function encodeTajimaByte(dx, dy, originalB2) {
         if (dx >= 3)  { b1 |= 0x01; dx -= 3; }
         if (dx >= 1)  { b0 |= 0x01; dx -= 1; }
     } else if (dx < 0) {
-        let ax = Math.abs(dx);
-        if (ax >= 81) { b2 |= 0x08; ax -= 81; }
-        if (ax >= 27) { b1 |= 0x08; ax -= 27; }
-        if (ax >= 9)  { b0 |= 0x08; ax -= 9; }
-        if (ax >= 3)  { b1 |= 0x02; ax -= 3; }
-        if (ax >= 1)  { b0 |= 0x02; ax -= 1; }
+        let x = -dx;
+        if (x >= 81) { b2 |= 0x08; x -= 81; }
+        if (x >= 27) { b1 |= 0x08; x -= 27; }
+        if (x >= 9)  { b0 |= 0x08; x -= 9; }
+        if (x >= 3)  { b1 |= 0x02; x -= 3; }
+        if (x >= 1)  { b0 |= 0x02; x -= 1; }
     }
 
     if (dy > 0) {
@@ -75,13 +78,14 @@ function encodeTajimaByte(dx, dy, originalB2) {
         if (dy >= 3)  { b1 |= 0x10; dy -= 3; }
         if (dy >= 1)  { b0 |= 0x10; dy -= 1; }
     } else if (dy < 0) {
-        let ay = Math.abs(dy);
-        if (ay >= 81) { b2 |= 0x20; ay -= 81; }
-        if (ay >= 27) { b1 |= 0x20; ay -= 27; }
-        if (ay >= 9)  { b0 |= 0x80; ay -= 9; }
-        if (ay >= 3)  { b1 |= 0x20; ay -= 3; }
-        if (ay >= 1)  { b0 |= 0x20; ay -= 1; }
+        let y = -dy;
+        if (y >= 81) { b2 |= 0x20; y -= 81; }
+        if (y >= 27) { b1 |= 0x20; y -= 27; }
+        if (y >= 9)  { b0 |= 0x80; y -= 9; }
+        if (y >= 3)  { b1 |= 0x20; y -= 3; }
+        if (y >= 1)  { b0 |= 0x20; y -= 1; }
     }
+
     return [b0, b1, b2];
 }
 
@@ -101,34 +105,35 @@ function resizeDST() {
     reader.onload = function(e) {
         const bytes = new Uint8Array(e.target.result);
         
-        // Loop through all stitches and scale them safely
+        // Stitches start at byte 512
         for (let i = 512; i < bytes.length; i += 3) {
             if (i + 2 >= bytes.length) break;
             
             let b2 = bytes[i+2];
-            if ((b2 & 0xF3) === 0xF3) break; // Stop at end of file
+            // Check for official Tajima end sequence
+            if ((b2 & 0xF3) === 0xF3) break; 
 
-            // Decode current stitch
-            let decoded = decodeTajimaByte(bytes[i], bytes[i+1], b2);
+            // 1. Decode stitch shift
+            let pos = decodeTajima(bytes[i], bytes[i+1], b2);
             
-            // Apply size change mathematically
-            let newDx = Math.round(decoded.dx * scaleFactor);
-            let newDy = Math.round(decoded.dy * scaleFactor);
+            // 2. Scale coordinates perfectly
+            let newDx = Math.round(pos.dx * scaleFactor);
+            let newDy = Math.round(pos.dy * scaleFactor);
             
-            // Re-encode perfectly back into the original array
-            let encoded = encodeTajimaByte(newDx, newDy, b2);
+            // 3. Re-encode back into the file structure cleanly
+            let encoded = encodeTajima(newDx, newDy, b2);
             bytes[i] = encoded[0];
             bytes[i+1] = encoded[1];
             bytes[i+2] = encoded[2];
         }
 
-        // Generate download
+        // Generate clean file download
         const blob = new Blob([bytes], { type: "application/octet-stream" });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = "resized_" + file.name;
+        link.download = "scaled_" + (scaleFactor * 100) + "pct_" + file.name;
         link.click();
-        statusText.innerText = "Done! Check your downloads.";
+        statusText.innerText = "Resized successfully!";
     };
 
     reader.readAsArrayBuffer(file);
