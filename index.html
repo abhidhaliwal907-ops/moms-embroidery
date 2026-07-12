@@ -73,29 +73,31 @@ document.getElementById('scale').addEventListener('change', function() {
     }
 });
 
+// Perfectly mapped Tajima spec parser
 function decodeTajimaStitch(b0, b1, b2) {
     let dx = 0, dy = 0;
+    
+    // X Axis
     if (b0 & 0x01) dx += 1;   if (b0 & 0x02) dx -= 1;
     if (b0 & 0x04) dx += 9;   if (b0 & 0x08) dx -= 9;
-    if (b0 & 0x10) dy += 1;   if (b0 & 0x20) dy -= 1;
-    if (b0 & 0x40) dy += 9;   if (b0 & 0x80) dy -= 9;
-    
     if (b1 & 0x01) dx += 3;   if (b1 & 0x02) dx -= 3;
     if (b1 & 0x04) dx += 27;  if (b1 & 0x08) dx -= 27;
-    if (b1 & 0x10) dy += 3;   if (b1 & 0x20) dy -= 3;
-    if (b1 & 0x40) dy += 27;  if (b1 & 0x80) dy -= 27;
-    
     if (b2 & 0x04) dx += 81;  if (b2 & 0x08) dx -= 81;
-    if (b2 & 0x10) dy += 81;  if (b2 & 0x20) dy -= 81;
     
-    // Tajima coordinates format records Y down as positive for the physical needle direction
-    return { dx, dy: -dy }; 
+    // Y Axis (Fixed bit mapping layout)
+    if (b0 & 0x80) dy += 1;   if (b0 & 0x40) dy -= 1;
+    if (b0 & 0x20) dy += 9;   if (b0 & 0x10) dy -= 9;
+    if (b1 & 0x80) dy += 3;   if (b1 & 0x40) dy -= 3;
+    if (b1 & 0x20) dy += 27;  if (b1 & 0x10) dy -= 27;
+    if (b2 & 0x20) dy += 81;  if (b2 & 0x10) dy -= 81;
+    
+    return { dx, dy }; 
 }
 
 function encodeTajimaStitch(dx, dy, oldB2) {
-    dy = -dy; // Revert inversion back to file storage system
     let b0 = 0, b1 = 0, b2 = oldB2 & 0xC3;
 
+    // Encode X Axis
     if (dx > 0) {
         if (dx >= 81) { b2 |= 0x04; dx -= 81; }
         if (dx >= 27) { b1 |= 0x04; dx -= 27; }
@@ -111,19 +113,20 @@ function encodeTajimaStitch(dx, dy, oldB2) {
         if (x >= 1)  { b0 |= 0x02; x -= 1; }
     }
 
+    // Encode Y Axis
     if (dy > 0) {
-        if (dy >= 81) { b2 |= 0x10; dy -= 81; }
-        if (dy >= 27) { b1 |= 0x40; dy -= 27; }
-        if (dy >= 9)  { b0 |= 0x40; dy -= 9; }
-        if (dy >= 3)  { b1 |= 0x10; dy -= 3; }
-        if (dy >= 1)  { b0 |= 0x10; dy -= 1; }
+        if (dy >= 81) { b2 |= 0x20; dy -= 81; }
+        if (dy >= 27) { b1 |= 0x20; dy -= 27; }
+        if (dy >= 9)  { b0 |= 0x20; dy -= 9; }
+        if (dy >= 3)  { b1 |= 0x80; dy -= 3; }
+        if (dy >= 1)  { b0 |= 0x80; dy -= 1; }
     } else if (dy < 0) {
         let y = -dy;
-        if (y >= 81) { b2 |= 0x20; y -= 81; }
-        if (y >= 27) { b1 |= 0x20; y -= 27; }
-        if (y >= 9)  { b0 |= 0x80; y -= 9; }
-        if (y >= 3)  { b1 |= 0x20; y -= 3; }
-        if (y >= 1)  { b0 |= 0x20; y -= 1; }
+        if (y >= 81) { b2 |= 0x10; y -= 81; }
+        if (y >= 27) { b1 |= 0x10; y -= 27; }
+        if (y >= 9)  { b0 |= 0x10; y -= 9; }
+        if (y >= 3)  { b1 |= 0x40; y -= 3; }
+        if (y >= 1)  { b0 |= 0x40; y -= 1; }
     }
     return [b0, b1, b2];
 }
@@ -135,20 +138,17 @@ function parsePoints(bytes, scale) {
     for (let i = 512; i < bytes.length; i += 3) {
         if (i + 2 >= bytes.length) break;
         let b2 = bytes[i+2];
-        if ((b2 & 0xF3) === 0xF3) break; // End token
+        if ((b2 & 0xF3) === 0xF3) break; 
 
         let stitch = decodeTajimaStitch(bytes[i], bytes[i+1], b2);
         
-        let dx = stitch.dx * scale;
-        let dy = stitch.dy * scale;
-        
-        cx += dx;
-        cy += dy;
+        cx += stitch.dx * scale;
+        cy += stitch.dy * scale;
         
         let type = 'stitch';
         if ((b2 & 0x83) === 0x83) type = 'jump';
         
-        pts.push({ x: cx, y: cy, type: type, oldB2: b2, origDx: stitch.dx, origDy: stitch.dy });
+        pts.push({ x: cx, y: cy, type: type });
     }
     return pts;
 }
@@ -157,14 +157,12 @@ function drawCanvas(canvasId, points) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
     
-    // Auto-resize canvas pixel buffer density matching mobile screens
     canvas.width = 220;
     canvas.height = 220;
     ctx.clearRect(0, 0, 220, 220);
 
     if (points.length === 0) return;
 
-    // Find boundaries to automatically frame the design center
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     points.forEach(p => {
         if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -174,19 +172,19 @@ function drawCanvas(canvasId, points) {
     let w = maxX - minX;
     let h = maxY - minY;
     let maxDim = Math.max(w, h, 1);
-    let zoom = 180 / maxDim; // Fit nicely with breathing padding room
+    let zoom = 170 / maxDim; 
 
     let offsetX = 110 - (minX + w / 2) * zoom;
     let offsetY = 110 - (minY + h / 2) * zoom;
 
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "#ff477e"; // Pretty pink stitch lines
+    ctx.strokeStyle = "#ff477e"; 
     ctx.beginPath();
 
     let first = true;
     points.forEach(p => {
         let scrX = p.x * zoom + offsetX;
-        let scrY = p.y * zoom + offsetY;
+        let scrY = p.y * zoom + offsetY; // Maintain natural rendering scale axis
 
         if (p.type === 'jump' || first) {
             ctx.moveTo(scrX, scrY);
@@ -200,14 +198,8 @@ function drawCanvas(canvasId, points) {
 
 function renderPreviews() {
     if (!originalFileBytes) return;
-    
-    // Parse absolute tracks
-    let origPoints = parsePoints(originalFileBytes, 1.0);
-    drawCanvas('canvasOrig', origPoints);
-
-    const scaleFactor = parseFloat(document.getElementById('scale').value);
-    let scaledPoints = parsePoints(originalFileBytes, scaleFactor);
-    drawCanvas('canvasScaled', scaledPoints);
+    drawCanvas('canvasOrig', parsePoints(originalFileBytes, 1.0));
+    drawCanvas('canvasScaled', parsePoints(originalFileBytes, parseFloat(document.getElementById('scale').value)));
 }
 
 function processDST() {
@@ -217,7 +209,6 @@ function processDST() {
     }
     
     const scaleFactor = parseFloat(document.getElementById('scale').value);
-    // Work on a duplicate data block so the original isn't destroyed
     let outputBytes = new Uint8Array(originalFileBytes);
     
     let cxOld = 0, cyOld = 0;
@@ -230,23 +221,18 @@ function processDST() {
 
         let originalStitch = decodeTajimaStitch(outputBytes[i], outputBytes[i+1], b2);
         
-        // Accumulate original positions precisely
         cxOld += originalStitch.dx;
         cyOld += originalStitch.dy;
         
-        // Determine intended absolute scaled location target
         let targetX = Math.round(cxOld * scaleFactor);
         let targetY = Math.round(cyOld * scaleFactor);
         
-        // Calculate the fractional coordinate step size needed right now
         let nextDx = targetX - cxNew;
         let nextDy = targetY - cyNew;
         
-        // Update new positions tracker
         cxNew += nextDx;
         cyNew += nextDy;
 
-        // Convert the structural needle track back into binary
         let encoded = encodeTajimaStitch(nextDx, nextDy, b2);
         outputBytes[i] = encoded[0];
         outputBytes[i+1] = encoded[1];
