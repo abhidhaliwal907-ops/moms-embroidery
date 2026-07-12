@@ -3,39 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mom's Embroidery Resizer</title>
+    <title>Mom's Embroidery Resizer & Previewer</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; background: #f4f6f9; padding: 20px; color: #333; }
-        .card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; margin: 40px auto; border: 1px solid #e1e8ed; }
-        h2 { margin-top: 0; color: #2c3e50; }
-        input, select, button { width: 100%; padding: 14px; margin: 12px 0; border-radius: 8px; border: 1px solid #ccd6dd; box-sizing: border-box; font-size: 16px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; background: #f4f6f9; padding: 15px; color: #333; margin: 0; }
+        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 500px; margin: 20px auto; border: 1px solid #e1e8ed; }
+        h2 { margin-top: 0; color: #2c3e50; font-size: 22px; }
+        input, select, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccd6dd; box-sizing: border-box; font-size: 16px; }
         button { background: #10b981; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:hover { background: #059669; }
-        .status { font-size: 14px; color: #657786; margin-top: 10px; }
+        .preview-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+        @media(min-width: 480px) { .preview-container { flex-direction: row; justify-content: space-between; } }
+        .preview-box { background: #eef2f5; padding: 10px; border-radius: 12px; flex: 1; border: 1px dashed #b0c4de; }
+        .preview-box h3 { margin: 5px 0; font-size: 14px; color: #4b5563; }
+        canvas { background: #fff; border-radius: 8px; width: 100%; max-width: 220px; height: 220px; border: 1px solid #ddd; display: block; margin: auto; }
+        .status { font-size: 14px; color: #657786; margin-top: 10px; font-weight: 500; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>🧵 Mom's Fixed DST Resizer</h2>
-    <p>Upload your .dst file, pick a size, and it will scale perfectly without distortion.</p>
+    <h2>🧵 Mom's DST Resizer & Preview</h2>
+    <p style="font-size: 14px; color: #657786; margin-top: -10px;">Completely free & runs safely right on your phone.</p>
     
     <input type="file" id="fileInput" accept=".dst">
     
-    <label for="scale" style="text-align: left; display: block; font-weight: 500; font-size: 14px;">Size Adjust:</label>
+    <label for="scale" style="text-align: left; display: block; font-weight: 500; font-size: 14px; margin-top: 5px;">Size Adjust:</label>
     <select id="scale">
         <option value="0.80">80% (Smaller)</option>
         <option value="0.90">90% (Slightly Smaller)</option>
+        <option value="1.00">100% (No Change Preview)</option>
         <option value="1.10">110% (Slightly Larger)</option>
         <option value="1.20">120% (Larger)</option>
     </select>
 
-    <button onclick="resizeDST()">Scale & Download</button>
-    <div id="statusText" class="status">Ready</div>
+    <button onclick="processDST()">Scale & Download</button>
+    <div id="statusText" class="status">Upload a file to begin</div>
+
+    <div class="preview-container">
+        <div class="preview-box">
+            <h3>Original Design</h3>
+            <canvas id="canvasOrig"></canvas>
+        </div>
+        <div class="preview-box">
+            <h3>Resized Preview</h3>
+            <canvas id="canvasScaled"></canvas>
+        </div>
+    </div>
 </div>
 
 <script>
-function decodeTajima(b0, b1, b2) {
+let originalFileBytes = null;
+
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        originalFileBytes = new Uint8Array(evt.target.result);
+        document.getElementById('statusText').innerText = "Original loaded. Updating previews...";
+        renderPreviews();
+    };
+    reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('scale').addEventListener('change', function() {
+    if (originalFileBytes) {
+        renderPreviews();
+    }
+});
+
+function decodeTajimaStitch(b0, b1, b2) {
     let dx = 0, dy = 0;
     if (b0 & 0x01) dx += 1;   if (b0 & 0x02) dx -= 1;
     if (b0 & 0x04) dx += 9;   if (b0 & 0x08) dx -= 9;
@@ -49,12 +87,14 @@ function decodeTajima(b0, b1, b2) {
     
     if (b2 & 0x04) dx += 81;  if (b2 & 0x08) dx -= 81;
     if (b2 & 0x10) dy += 81;  if (b2 & 0x20) dy -= 81;
-    return { dx, dy };
+    
+    // Tajima coordinates format records Y down as positive for the physical needle direction
+    return { dx, dy: -dy }; 
 }
 
-function encodeTajima(dx, dy, originalB2) {
-    let b0 = 0, b1 = 0;
-    let b2 = originalB2 & 0xC3; // Keep only command/jump flags, strip coordinate data safely
+function encodeTajimaStitch(dx, dy, oldB2) {
+    dy = -dy; // Revert inversion back to file storage system
+    let b0 = 0, b1 = 0, b2 = oldB2 & 0xC3;
 
     if (dx > 0) {
         if (dx >= 81) { b2 |= 0x04; dx -= 81; }
@@ -85,58 +125,142 @@ function encodeTajima(dx, dy, originalB2) {
         if (y >= 3)  { b1 |= 0x20; y -= 3; }
         if (y >= 1)  { b0 |= 0x20; y -= 1; }
     }
-
     return [b0, b1, b2];
 }
 
-function resizeDST() {
-    const fileInput = document.getElementById('fileInput');
-    const scaleFactor = parseFloat(document.getElementById('scale').value);
-    const statusText = document.getElementById('statusText');
+function parsePoints(bytes, scale) {
+    let pts = [];
+    let cx = 0, cy = 0;
     
-    if (!fileInput.files[0]) {
-        alert("Please upload a file!");
+    for (let i = 512; i < bytes.length; i += 3) {
+        if (i + 2 >= bytes.length) break;
+        let b2 = bytes[i+2];
+        if ((b2 & 0xF3) === 0xF3) break; // End token
+
+        let stitch = decodeTajimaStitch(bytes[i], bytes[i+1], b2);
+        
+        let dx = stitch.dx * scale;
+        let dy = stitch.dy * scale;
+        
+        cx += dx;
+        cy += dy;
+        
+        let type = 'stitch';
+        if ((b2 & 0x83) === 0x83) type = 'jump';
+        
+        pts.push({ x: cx, y: cy, type: type, oldB2: b2, origDx: stitch.dx, origDy: stitch.dy });
+    }
+    return pts;
+}
+
+function drawCanvas(canvasId, points) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    
+    // Auto-resize canvas pixel buffer density matching mobile screens
+    canvas.width = 220;
+    canvas.height = 220;
+    ctx.clearRect(0, 0, 220, 220);
+
+    if (points.length === 0) return;
+
+    // Find boundaries to automatically frame the design center
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+
+    let w = maxX - minX;
+    let h = maxY - minY;
+    let maxDim = Math.max(w, h, 1);
+    let zoom = 180 / maxDim; // Fit nicely with breathing padding room
+
+    let offsetX = 110 - (minX + w / 2) * zoom;
+    let offsetY = 110 - (minY + h / 2) * zoom;
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#ff477e"; // Pretty pink stitch lines
+    ctx.beginPath();
+
+    let first = true;
+    points.forEach(p => {
+        let scrX = p.x * zoom + offsetX;
+        let scrY = p.y * zoom + offsetY;
+
+        if (p.type === 'jump' || first) {
+            ctx.moveTo(scrX, scrY);
+            first = false;
+        } else {
+            ctx.lineTo(scrX, scrY);
+        }
+    });
+    ctx.stroke();
+}
+
+function renderPreviews() {
+    if (!originalFileBytes) return;
+    
+    // Parse absolute tracks
+    let origPoints = parsePoints(originalFileBytes, 1.0);
+    drawCanvas('canvasOrig', origPoints);
+
+    const scaleFactor = parseFloat(document.getElementById('scale').value);
+    let scaledPoints = parsePoints(originalFileBytes, scaleFactor);
+    drawCanvas('canvasScaled', scaledPoints);
+}
+
+function processDST() {
+    if (!originalFileBytes) {
+        alert("Please upload a file first!");
         return;
     }
+    
+    const scaleFactor = parseFloat(document.getElementById('scale').value);
+    // Work on a duplicate data block so the original isn't destroyed
+    let outputBytes = new Uint8Array(originalFileBytes);
+    
+    let cxOld = 0, cyOld = 0;
+    let cxNew = 0, cyNew = 0;
 
-    const file = fileInput.files[0];
-    const reader = new FileReader();
+    for (let i = 512; i < outputBytes.length; i += 3) {
+        if (i + 2 >= outputBytes.length) break;
+        let b2 = outputBytes[i+2];
+        if ((b2 & 0xF3) === 0xF3) break;
 
-    reader.onload = function(e) {
-        const bytes = new Uint8Array(e.target.result);
+        let originalStitch = decodeTajimaStitch(outputBytes[i], outputBytes[i+1], b2);
         
-        // Stitches start at byte 512
-        for (let i = 512; i < bytes.length; i += 3) {
-            if (i + 2 >= bytes.length) break;
-            
-            let b2 = bytes[i+2];
-            // Check for official Tajima end sequence
-            if ((b2 & 0xF3) === 0xF3) break; 
+        // Accumulate original positions precisely
+        cxOld += originalStitch.dx;
+        cyOld += originalStitch.dy;
+        
+        // Determine intended absolute scaled location target
+        let targetX = Math.round(cxOld * scaleFactor);
+        let targetY = Math.round(cyOld * scaleFactor);
+        
+        // Calculate the fractional coordinate step size needed right now
+        let nextDx = targetX - cxNew;
+        let nextDy = targetY - cyNew;
+        
+        // Update new positions tracker
+        cxNew += nextDx;
+        cyNew += nextDy;
 
-            // 1. Decode stitch shift
-            let pos = decodeTajima(bytes[i], bytes[i+1], b2);
-            
-            // 2. Scale coordinates perfectly
-            let newDx = Math.round(pos.dx * scaleFactor);
-            let newDy = Math.round(pos.dy * scaleFactor);
-            
-            // 3. Re-encode back into the file structure cleanly
-            let encoded = encodeTajima(newDx, newDy, b2);
-            bytes[i] = encoded[0];
-            bytes[i+1] = encoded[1];
-            bytes[i+2] = encoded[2];
-        }
+        // Convert the structural needle track back into binary
+        let encoded = encodeTajimaStitch(nextDx, nextDy, b2);
+        outputBytes[i] = encoded[0];
+        outputBytes[i+1] = encoded[1];
+        outputBytes[i+2] = encoded[2];
+    }
 
-        // Generate clean file download
-        const blob = new Blob([bytes], { type: "application/octet-stream" });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = "scaled_" + (scaleFactor * 100) + "pct_" + file.name;
-        link.click();
-        statusText.innerText = "Resized successfully!";
-    };
-
-    reader.readAsArrayBuffer(file);
+    const fileInput = document.getElementById('fileInput');
+    const filename = fileInput.files[0].name;
+    const blob = new Blob([outputBytes], { type: "application/octet-stream" });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = "scaled_" + (scaleFactor * 100) + "pct_" + filename;
+    link.click();
+    document.getElementById('statusText').innerText = "Saved successfully!";
 }
 </script>
 
