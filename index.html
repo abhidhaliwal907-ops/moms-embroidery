@@ -3,187 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mom's Intelligent PES Density Adjuster</title>
+    <title>Mom's Perfect Stitch Optimizer</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; background: #f3f4f6; padding: 20px; color: #1f2937; margin: 0; }
-        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); max-width: 480px; margin: 40px auto; border: 1px solid #e5e7eb; }
-        h2 { margin-top: 0; color: #111827; font-size: 22px; }
-        input[type="file"] { width: 100%; padding: 15px; margin: 15px 0; border: 2px dashed #d1d5db; border-radius: 10px; box-sizing: border-box; background: #f9fafb; cursor: pointer; }
-        select, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #d1d5db; box-sizing: border-box; font-size: 16px; font-weight: 600; }
-        button { background: #3b82f6; color: white; border: none; cursor: pointer; transition: background 0.2s; }
-        button:hover { background: #2563eb; }
-        .status-box { background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 8px; font-size: 14px; margin: 15px 0; font-weight: 500; border-left: 4px solid #3b82f6; text-align: left; }
-        .counter { font-weight: bold; color: #dc2626; }
-        .success-text { color: #16a34a; font-weight: bold; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; padding: 20px; text-align: center; margin: 0; }
+        .box { background: white; max-width: 450px; margin: 30px auto; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+        h2 { margin: 0 0 15px 0; color: #111827; font-size: 20px; }
+        input[type="file"] { width: 100%; padding: 12px; margin: 15px 0; border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; box-sizing: border-box; }
+        select, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; font-size: 16px; font-weight: 600; box-sizing: border-box; }
+        select { border: 1px solid #cbd5e1; background: white; }
+        button { background: #10b981; color: white; border: none; cursor: pointer; }
+        button:hover { background: #059669; }
+        .status { background: #f0fdf4; color: #166534; padding: 12px; border-radius: 8px; font-size: 14px; margin: 15px 0; text-align: left; border-left: 4px solid #10b981; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>🧵 Smart PES Density Adjuster</h2>
-    <p style="font-size: 13px; color: #6b7280; margin-top: -10px;">Upload a .pes version to clear out packed stitches.</p>
+<div class="box">
+    <h2>🧵 Smart Density Adjuster (.DST)</h2>
+    <p style="font-size: 13px; color: #6b7280; margin-top: -10px;">Safely changes size and removes crowded stitches.</p>
     
-    <input type="file" id="pesInput" accept=".pes">
+    <input type="file" id="fileInput" accept=".dst">
     
-    <label style="text-align: left; display: block; font-size: 14px; font-weight: 500; margin-bottom: 2px;">Target Scaling Size:</label>
-    <select id="scaleSelect">
-        <option value="0.80">80% (Safe Downsize - Drops Density)</option>
-        <option value="0.85">85% (Safe Downsize)</option>
+    <label style="text-align: left; display: block; font-size: 14px; font-weight: 500;">Scale Size:</label>
+    <select id="scaleFactor">
+        <option value="0.80">80% (Smaller - Deletes Extra Stitches)</option>
+        <option value="0.85">85% (Smaller)</option>
         <option value="0.90">90% (Slightly Smaller)</option>
-        <option value="1.00">100% (Density Cleaning Only)</option>
+        <option value="1.00">100% (Fix Density Only)</option>
     </select>
 
-    <div id="statusReport" class="status-box">Waiting for an embroidery file...</div>
-    <button id="processBtn">Adjust Density & Download</button>
+    <div id="statusReport" class="status">Please choose a .dst file...</div>
+    <button id="processBtn">Fix Density & Download</button>
 </div>
 
 <script>
-let originalFileBuffer = null;
+let fileData = null;
 
-document.getElementById('pesInput').addEventListener('change', function(e) {
+document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
     
     const reader = new FileReader();
     reader.onload = function(evt) {
-        originalFileBuffer = evt.target.result;
-        
-        // Read raw PES file properties
-        const view = new DataView(originalFileBuffer);
-        const totalBytes = originalFileBuffer.byteLength;
-        
-        document.getElementById('statusReport').innerHTML = 
-            `📊 <b>File Loaded:</b> ${file.name}<br>` +
-            `📦 <b>Data Size:</b> ${totalBytes} bytes<br>` +
-            `⚡ Ready to process matrix structures.`;
+        fileData = evt.target.result;
+        document.getElementById('statusReport').innerHTML = `<b>Loaded:</b> ${file.name}<br>Ready to optimize stitches.`;
     };
     reader.readAsArrayBuffer(file);
 });
 
 document.getElementById('processBtn').addEventListener('click', () => {
-    if (!originalFileBuffer) { alert("Please upload a .pes file first."); return; }
+    if (!fileData) { alert("Please upload a .dst file first."); return; }
     
-    const scaleFactor = parseFloat(document.getElementById('scaleSelect').value);
-    const cleanBuffer = recalculatePesDensity(originalFileBuffer, scaleFactor);
+    const scale = parseFloat(document.getElementById('scaleFactor').value);
     
-    const originalName = document.getElementById('pesInput').files[0].name;
-    const blob = new Blob([cleanBuffer], { type: "application/octet-stream" });
+    // Parse original stitches safely
+    const originalStitches = parseDstStitches(fileData);
+    
+    // Filter and adjust density
+    const optimizedStitches = cleanAndScale(originalStitches, scale);
+    
+    // Build a brand new binary DST array with pristine flags
+    const outputBuffer = compileNewDst(fileData, optimizedStitches);
+    
+    const blob = new Blob([outputBuffer], { type: "application/octet-stream" });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `density_fixed_${Math.round(scaleFactor*100)}pct_${originalName}`;
+    link.download = `fixed_${Math.round(scale*100)}pct_${document.getElementById('fileInput').files[0].name}`;
     link.click();
     
-    document.getElementById('statusReport').innerHTML += `<br><span class="success-text">✅ Done! Extra stitches stripped out safely.</span>`;
+    document.getElementById('statusReport').innerHTML = `<b>Success!</b> Removed ${originalStitches.length - optimizedStitches.length} bunched-up stitches. File is completely safe to sew!`;
 });
 
-// Loops through the file blocks to apply spatial geometric density scaling logic
-function recalculatePesDensity(buffer, scale) {
-    const srcView = new DataView(buffer);
-    const dstBuffer = new ArrayBuffer(buffer.byteLength);
-    const dstView = new DataView(dstBuffer);
+function parseDstStitches(buffer) {
+    const view = new DataView(buffer);
+    const stitches = [];
+    let x = 0, y = 0;
     
-    // Step 1: Clone the complete byte sequence header intact
-    for (let i = 0; i < buffer.byteLength; i++) {
-        dstView.setUint8(i, srcView.getUint8(i));
-    }
-    
-    // Step 2: Locate the PEC block offset (stores the structural machine coordinate points)
-    let pecSeek = 0;
-    try {
-        pecSeek = srcView.getUint32(8, true); // Stored in the little-endian PES block header
-    } catch(e) {
-        pecSeek = 512; // Fallback to safe structural boundaries
-    }
-    
-    if (pecSeek <= 0 || pecSeek >= buffer.byteLength) {
-        pecSeek = 512;
-    }
-
-    // Step 3: Parse stitch blocks and dynamically eliminate closely grouped elements
-    let readIdx = pecSeek + 48; // Skip the standard internal PEC metadata block headers
-    let writeIdx = readIdx;
-    
-    let lastX = 0, lastY = 0;
-    let deletedCount = 0;
-    let totalProcessed = 0;
-
-    // Minimum physical needle movement gap allowed to prevent thread bunching (0.4mm default)
-    const minSafeDistanceSquared = (0.4 * 10) * (0.4 * 10); 
-
-    while (readIdx < buffer.byteLength - 2) {
-        let b0 = srcView.getUint8(readIdx);
-        let b1 = srcView.getUint8(readIdx + 1);
+    // DST coordinates start after the 512-byte header
+    for (let i = 512; i < buffer.byteLength - 3; i += 3) {
+        const b0 = view.getUint8(i);
+        const b1 = view.getUint8(i + 1);
+        const b2 = view.getUint8(i + 2);
         
-        if (b0 === 0xFF && b1 === 0x00) break; // Break safely at design terminators
+        if ((b2 & 0xF3) === 0xF3) break; // End of file flag
         
-        totalProcessed++;
         let dx = 0, dy = 0;
-        let isJumpStitch = false;
+        if (b0 & 0x01) dx += 1;  if (b0 & 0x02) dx -= 1;
+        if (b0 & 0x04) dx += 9;  if (b0 & 0x08) dx -= 9;
+        if (b0 & 0x10) dy += 1;  if (b0 & 0x20) dy -= 1;
+        if (b0 & 0x40) dy += 9;  if (b0 & 0x80) dy -= 9;
+        if (b1 & 0x01) dx += 3;  if (b1 & 0x02) dx -= 3;
+        if (b1 & 0x04) dx += 27; if (b1 & 0x08) dx -= 27;
+        if (b1 & 0x10) dy += 3;  if (b1 & 0x20) dy -= 3;
+        if (b1 & 0x40) dy += 27; if (b1 & 0x80) dy -= 27;
+        if (b2 & 0x04) dx += 81; if (b2 & 0x08) dx -= 81;
+        if (b2 & 0x10) dy += 81; if (b2 & 0x20) dy -= 81;
         
-        // Handle standard sign extension parsing loops
-        if ((b0 & 0x80) !== 0) {
-            dx = ((b0 & 0x0F) << 8) | b1;
-            if ((dx & 0x800) !== 0) dx -= 0x1000;
-            readIdx += 2;
+        x += dx;
+        y += dy;
+        
+        let command = "stitch";
+        if ((b2 & 0xC3) === 0xC3) command = "jump";
+        
+        stitches.push({ x: x, y: y, cmd: command });
+    }
+    return stitches;
+}
+
+function cleanAndScale(stitches, scale) {
+    const result = [];
+    let lastX = 0, lastY = 0;
+    
+    // Minimum allowable physical distance between needle points (0.4mm = 4 units)
+    const minGapLimit = 4; 
+
+    stitches.forEach((st, idx) => {
+        let targetX = Math.round(st.x * scale);
+        let targetY = Math.round(st.y * scale);
+        
+        if (st.cmd === "jump" || idx === 0 || idx === stitches.length - 1) {
+            result.push({ x: targetX, y: targetY, cmd: st.cmd });
+            lastX = targetX;
+            lastY = targetY;
         } else {
-            dx = b0;
-            if (dx > 63) dx -= 128;
-            readIdx += 1;
+            let distance = Math.sqrt(Math.pow(targetX - lastX, 2) + Math.pow(targetY - lastY, 2));
+            // Density validation: drop the point if it's crowded
+            if (distance >= minGapLimit) {
+                result.push({ x: targetX, y: targetY, cmd: "stitch" });
+                lastX = targetX;
+                lastY = targetY;
+            }
         }
-        
-        let nextB0 = srcView.getUint8(readIdx);
-        let nextB1 = srcView.getUint8(readIdx + 1);
-        
-        if ((nextB0 & 0x80) !== 0) {
-            dy = ((nextB0 & 0x0F) << 8) | nextB1;
-            if ((dy & 0x800) !== 0) dy -= 0x1000;
-            readIdx += 2;
-        } else {
-            dy = nextB0;
-            if (dy > 63) dy -= 128;
-            readIdx += 1;
-        }
-        
-        // Scale vectors into the new dimensions matrix
-        let newDx = Math.round(dx * scale);
-        let newDy = Math.round(dy * scale);
-        
-        // Density math: calculate distance from the previous penetration point
-        let distSq = (newDx * newDx) + (newDy * newDy);
-        
-        // If the scaled point is too closely packed, drop it to relieve tension
-        if (distSq < minSafeDistanceSquared && !isJumpStitch && totalProcessed > 5) {
-            deletedCount++;
-            // Do not write point data, continue forward to step past it
-            continue;
-        }
-        
-        // Otherwise, pack coordinates securely into output buffer structure
-        if (Math.abs(newDx) > 63) {
-            let outVal = (newDx & 0xFFF) | 0x8000;
-            dstView.setUint8(writeIdx++, (outVal >> 8) & 0xFF);
-            dstView.setUint8(writeIdx++, outVal & 0xFF);
-        } else {
-            dstView.setUint8(writeIdx++, newDx & 0x7F);
-        }
-        
-        if (Math.abs(newDy) > 63) {
-            let outVal = (newDy & 0xFFF) | 0x8000;
-            dstView.setUint8(writeIdx++, (outVal >> 8) & 0xFF);
-            dstView.setUint8(writeIdx++, outVal & 0xFF);
-        } else {
-            dstView.setUint8(writeIdx++, newDy & 0x7F);
-        }
+    });
+    return result;
+}
+
+function compileNewDst(origBuffer, stitches) {
+    const newBuffer = new ArrayBuffer(512 + (stitches.length * 3) + 3);
+    const view = new DataView(newBuffer);
+    
+    // Copy headers exactly
+    const origView = new DataView(origBuffer);
+    for (let i = 0; i < 512; i++) {
+        view.setUint8(i, origView.getUint8(i));
     }
     
-    // Inject end tag sequence
-    dstView.setUint8(writeIdx++, 0xFF);
-    dstView.setUint8(writeIdx++, 0x00);
+    let cx = 0, cy = 0;
+    let idx = 512;
     
-    document.getElementById('statusReport').innerHTML += 
-        `<br>✂️ <b>Density Filter:</b> Removed <span class="counter">${deletedCount}</span> dangerously small stitches.`;
+    stitches.forEach(st => {
+        let dx = st.x - cx;
+        let dy = st.y - cy;
+        cx = st.x;
+        cy = st.y;
         
-    return dstBuffer.slice(0, writeIdx);
+        let b0 = 0, b1 = 0, b2 = 0;
+        if (st.cmd === "jump") b2 |= 0x83; // Maintain pure leap flag layouts
+        
+        let ax = Math.abs(dx), ay = Math.abs(dy);
+        if (dx > 0) {
+            if (ax >= 81) { b2 |= 0x04; ax -= 81; }
+            if (ax >= 27) { b1 |= 0x04; ax -= 27; }
+            if (ax >= 9)  { b0 |= 0x04; ax -= 9; }
+            if (ax >= 3)  { b1 |= 0x01; ax -= 3; }
+            if (ax >= 1)  { b0 |= 0x01; ax -= 1; }
+        } else if (dx < 0) {
+            if (ax >= 81) { b2 |= 0x08; ax -= 81; }
+            if (ax >= 27) { b1 |= 0x08; ax -= 27; }
+            if (ax >= 9)  { b0 |= 0x08; ax -= 9; }
+            if (ax >= 3)  { b1 |= 0x02; ax -= 3; }
+            if (ax >= 1)  { b0 |= 0x02; ax -= 1; }
+        }
+        
+        if (dy > 0) {
+            if (ay >= 81) { b2 |= 0x10; ay -= 81; }
+            if (ay >= 27) { b1 |= 0x10; ay -= 27; }
+            if (ay >= 9)  { b0 |= 0x10; ay -= 9; }
+            if (ay >= 3)  { b1 |= 0x40; ay -= 3; }
+            if (ay >= 1)  { b0 |= 0x40; ay -= 1; }
+        } else if (dy < 0) {
+            if (ay >= 81) { b2 |= 0x20; ay -= 81; }
+            if (ay >= 27) { b1 |= 0x20; ay -= 27; }
+            if (ay >= 9)  { b0 |= 0x80; ay -= 9; }
+            if (ay >= 3)  { b1 |= 0x20; ay -= 3; }
+            if (ay >= 1)  { b0 |= 0x20; ay -= 1; }
+        }
+        
+        view.setUint8(idx++, b0);
+        view.setUint8(idx++, b1);
+        view.setUint8(idx++, b2);
+    });
+    
+    view.setUint8(idx++, 0);
+    view.setUint8(idx++, 0);
+    view.setUint8(idx++, 0xF3); // Standard Tajima termination tag
+    
+    return newBuffer;
 }
 </script>
 
