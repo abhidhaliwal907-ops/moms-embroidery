@@ -1,54 +1,71 @@
-import pyembroidery
+import os
 import math
+from flask import Flask, request, send_file, render_template_string
+import pyembroidery
 
-def adjust_pes_density(input_file_path, output_file_path, scale_factor=0.80):
-    # 1. Read the .pes file using a production-grade parser
-    pattern = pyembroidery.read(input_file_path)
-    
+app = Flask(__name__)
+
+# The core density calculation logic
+def process_density(input_bytes, scale_factor=0.80):
+    # Read the data from binary memory
+    pattern = pyembroidery.read_bytes(input_bytes)
     if not pattern:
-        print("Error: Could not read or decode the embroidery file.")
-        return False
+        return None
 
-    # 2. Extract all structural stitches from the object container
     original_stitches = pattern.stitches
     optimized_pattern = pyembroidery.EmbPattern()
-    
-    # Keep the original color palette/thread information completely intact
     optimized_pattern.threadlist = pattern.threadlist
 
     last_x, last_y = 0, 0
-    min_safe_distance = 4.0  # 0.4mm threshold in embroidery coordinate units
+    min_safe_distance = 4.0  # 0.4mm distance rule to protect threads
 
-    # 3. Process each needle point through a spatial grid filter
     for idx, stitch in enumerate(original_stitches):
         x, y, flags = stitch
-        
-        # Scale the geometric coordinates down
         target_x = round(x * scale_factor)
         target_y = round(y * scale_factor)
         
-        # Always keep command flags like JUMP, COLOR_BREAK, END, or the first/last stitch
-        # pyembroidery flags: 0 = STITCH, 1 = JUMP, 2 = TRIM, 4 = COLOR_BREAK, 8 = END
+        # Keep jump flags and edges untouched
         if flags != 0 or idx == 0 or idx == len(original_stitches) - 1:
             optimized_pattern.add_stitch_absolute(flags, target_x, target_y)
             last_x, last_y = target_x, target_y
         else:
-            # Calculate actual physical distance between needle penetrations
             distance = math.sqrt((target_x - last_x)**2 + (target_y - last_y)**2)
-            
-            # Density Check: Only add the stitch if it won't bunch up thread
             if distance >= min_safe_distance:
                 optimized_pattern.add_stitch_absolute(flags, target_x, target_y)
                 last_x, last_y = target_x, target_y
 
-    # 4. Write back to a perfectly formatted, uncorrupted .pes file
-    # The library handles building the binary headers, tables, and PEC blocks automatically
-    pyembroidery.write(optimized_pattern, output_file_path)
-    
-    print(f"Success! Scaled to {int(scale_factor*100)}%.")
-    print(f"Original Stitches: {len(original_stitches)}")
-    print(f"Optimized Stitches: {len(optimized_pattern.stitches)}")
-    return True
+    # Write the output pattern to bytes in memory
+    return pyembroidery.write_bytes(optimized_pattern, "out.pes")
 
-# Example Usage:
-# adjust_pes_density("flower_large.pes", "flower_optimized.pes", scale_factor=0.80)
+# Route to display the webpage
+@app.route('/')
+def home():
+    with open('index.html', 'r') as f:
+        return render_template_string(f.read())
+
+# Route that handles the file conversion request
+@app.route('/convert', methods=['POST'])
+def convert():
+    if 'file' not in request.files:
+        return "No file part", 400
+    file = request.files['file']
+    scale = float(request.form.get('scale', 0.80))
+    
+    if file.filename == '':
+        return "No selected file", 400
+
+    file_bytes = file.read()
+    output_bytes = process_density(file_bytes, scale)
+    
+    if not output_bytes:
+        return "Failed to process embroidery file structural alignment.", 500
+
+    # Save to a temporary array and stream back to phone
+    temp_path = "temp_output.pes"
+    with open(temp_path, "wb") as f:
+        f.write(output_bytes)
+
+    return send_file(temp_path, as_attachment=True, download_name=f"fixed_{int(scale*100)}pct_{file.filename}")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
