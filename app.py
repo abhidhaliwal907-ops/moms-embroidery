@@ -25,8 +25,8 @@ def advanced_density_engine(input_bytes, percent_change, scale_size_together):
     geom_scale = factor if scale_size_together else 1.0
 
     # Step 2: Calculate density shift adjustments
-    # If size is NOT changing, we compensate spatial spacing internally to close the gaps
-    spacing_compensation = 1.0 / math.sqrt(factor) if (!scale_size_together and percent_change < 0) else 1.0
+    # FIXED SYNTAX HERE: Using 'not' instead of '!' for Python standards
+    spacing_compensation = 1.0 / math.sqrt(factor) if (not scale_size_together and percent_change < 0) else 1.0
 
     last_x, last_y = 0, 0
     accumulator = 0.0
@@ -106,7 +106,6 @@ def convert():
     except ValueError:
         density_val = 0.0
         
-    # Read the checkbox status (returns 'on' if checked, None if empty)
     scale_size = request.form.get('scale_size') == 'on'
 
     if file.filename == '':
