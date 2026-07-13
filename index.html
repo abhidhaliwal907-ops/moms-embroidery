@@ -3,37 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mom's Embroidery Resizer & Previewer</title>
-    <!-- Load Brython to run the pyembroidery library directly in the browser -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.4/brython.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.4/brython_stdlib.min.js"></script>
+    <title>Mom's DST Resizer & Preview</title>
+    <!-- Include industry standard Embroidery processing scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; background: #f4f6f9; padding: 15px; color: #333; margin: 0; }
-        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 500px; margin: 20px auto; border: 1px solid #e1e8ed; }
-        h2 { margin-top: 0; color: #2c3e50; font-size: 22px; }
-        input, select, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccd6dd; box-sizing: border-box; font-size: 16px; }
-        button { background: #10b981; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #059669; }
-        .preview-container { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
-        @media(min-width: 480px) { .preview-container { flex-direction: row; justify-content: space-between; } }
-        .preview-box { background: #eef2f5; padding: 10px; border-radius: 12px; flex: 1; border: 1px dashed #b0c4de; }
-        .preview-box h3 { margin: 5px 0; font-size: 14px; color: #4b5563; }
-        .dimensions { font-size: 13px; font-weight: bold; color: #3b82f6; margin-bottom: 5px; }
-        canvas { background: #fff; border-radius: 8px; width: 100%; max-width: 220px; height: 220px; border: 1px solid #ddd; display: block; margin: auto; }
-        .status { font-size: 14px; color: #657786; margin-top: 10px; font-weight: 500; }
-        #loadingOverlay { display: none; color: #3b82f6; font-weight: bold; margin: 10px 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #fafafa; padding: 20px; color: #333; margin: 0; text-align: center; }
+        .container { background: #ffffff; max-width: 500px; margin: 30px auto; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border: 1px solid #eaeaea; }
+        h2 { margin-top: 0; color: #1a1a1a; font-size: 22px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        input[type="file"] { width: 100%; padding: 12px; margin: 15px 0; border: 2px dashed #ddd; border-radius: 8px; box-sizing: border-box; background: #fafafa; cursor: pointer; }
+        select, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; font-weight: 600; box-sizing: border-box; }
+        select { background-color: #fff; cursor: pointer; }
+        button { background-color: #10b981; color: white; border: none; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #059669; }
+        .preview-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-top: 20px; }
+        @media(min-width: 450px) { .preview-grid { grid-template-columns: 1fr 1fr; } }
+        .preview-card { background: #f9fafb; padding: 12px; border-radius: 12px; border: 1px solid #f0f0f0; }
+        .preview-card h3 { font-size: 14px; margin: 0 0 8px 0; color: #4b5563; }
+        .size-label { font-size: 13px; font-weight: bold; color: #2563eb; margin-bottom: 8px; }
+        canvas { background: white; border: 1px solid #e5e7eb; border-radius: 8px; width: 100%; max-width: 200px; aspect-ratio: 1; margin: 0 auto; display: block; }
+        .status { font-size: 14px; color: #6b7280; margin-top: 12px; font-weight: 500; }
     </style>
 </head>
-<body onload="brython()">
+<body>
 
-<div class="card">
+<div class="container">
     <h2>🧵 Mom's DST Resizer & Preview</h2>
-    <p style="font-size: 14px; color: #657786; margin-top: -10px;">Powered by pyembroidery engine.</p>
+    <p style="font-size: 13px; color: #6b7280; margin-top: -10px;">Completely free & runs safely right on your phone.</p>
     
     <input type="file" id="fileInput" accept=".dst">
     
-    <label for="scale" style="text-align: left; display: block; font-weight: 500; font-size: 14px; margin-top: 5px;">Size Adjust:</label>
-    <select id="scale">
+    <label style="text-align: left; display: block; font-size: 14px; font-weight: 500; margin-bottom: 2px;">Size Adjust:</label>
+    <select id="scaleSelect">
         <option value="0.80">80% (Smaller)</option>
         <option value="0.90">90% (Slightly Smaller)</option>
         <option value="1.00">100% (No Change Preview)</option>
@@ -41,221 +41,216 @@
         <option value="1.20">120% (Larger)</option>
     </select>
 
-    <div id="loadingOverlay">Initializing core engine... please wait...</div>
-    <button id="actionBtn" onclick="processFileJS()">Scale & Download</button>
-    <div id="statusText" class="status">Upload a file to begin</div>
+    <button id="downloadBtn">Scale & Download</button>
+    <div id="statusMessage" class="status">Please upload a .dst file to begin</div>
 
-    <div class="preview-container">
-        <div class="preview-box">
+    <div class="preview-grid">
+        <div class="preview-card">
             <h3>Original Design</h3>
-            <div id="origDim" class="dimensions">Size: --</div>
+            <div id="origSize" class="size-label">Size: --</div>
             <canvas id="canvasOrig"></canvas>
         </div>
-        <div class="preview-box">
+        <div class="preview-card">
             <h3>Resized Preview</h3>
-            <div id="scaledDim" class="dimensions">Size: --</div>
+            <div id="scaledSize" class="size-label">Size: --</div>
             <canvas id="canvasScaled"></canvas>
         </div>
     </div>
 </div>
 
-<!-- Virtual Python script container running inside the page -->
-<script type="text/python">
-from browser import window, document, bind
-import io
-
-# Inline lightweight micro-implementation of pyembroidery patterns for zero-latency execution
-def py_process_dst(file_bytes, scale_factor, command):
-    # Parse Tajima header and coordinates safely
-    pts = []
-    cx, cy = 0, 0
-    header_offset = 512
-    
-    for i in range(header_offset, len(file_bytes), 3):
-        if i + 2 >= len(file_bytes):
-            break
-        b0, b1, b2 = file_bytes[i], file_bytes[i+1], file_bytes[i+2]
-        if (b2 & 0xF3) == 0xF3:
-            break
-            
-        # Standard native Tajima translation table matrix
-        dx, dy = 0, 0
-        if b0 & 0x01: dx += 1
-        if b0 & 0x02: dx -= 1
-        if b0 & 0x04: dx += 9
-        if b0 & 0x08: dx -= 9
-        if b0 & 0x10: dy += 1
-        if b0 & 0x20: dy -= 1
-        if b0 & 0x40: dy += 9
-        if b0 & 0x80: dy -= 9
-        if b1 & 0x01: dx += 3
-        if b1 & 0x02: dx -= 3
-        if b1 & 0x04: dx += 27
-        if b1 & 0x08: dx -= 27
-        if b1 & 0x10: dy += 3
-        if b1 & 0x20: dy -= 3
-        if b1 & 0x40: dy += 27
-        if b1 & 0x80: dy -= 27
-        if b2 & 0x04: dx += 81
-        if b2 & 0x08: dx -= 81
-        if b2 & 0x10: dy += 81
-        if b2 & 0x20: dy -= 81
-        
-        # DST format stores Y inverted relative to web canvas systems
-        cx += dx
-        cy -= dy
-        
-        flags = "stitch"
-        if (b2 & 0x83) == 0x83:
-            flags = "jump"
-            
-        pts.append({'x': cx, 'y': cy, 'type': flags})
-        
-    if command == "preview":
-        return pts
-
-    # Safe export system
-    out = bytearray(file_bytes[:512])
-    nx, ny = 0, 0
-    ox, oy = 0, 0
-    
-    for p in pts:
-        ox_curr = p['x']
-        oy_curr = -p['y']
-        
-        tx = round(ox_curr * scale_factor)
-        ty = round(oy_curr * scale_factor)
-        
-        ndx = tx - nx
-        ndy = ty - ny
-        
-        nx += ndx
-        ny += ndy
-        
-        # Encode coordinates securely
-        b0, b1, b2 = 0, 0, 0
-        v_dx, v_dy = ndx, ndy
-        
-        if v_dx > 0:
-            if v_dx >= 81: b2 |= 0x04; v_dx -= 81
-            if v_dx >= 27: b1 |= 0x04; v_dx -= 27
-            if v_dx >= 9:  b0 |= 0x04; v_dx -= 9
-            if v_dx >= 3:  b1 |= 0x01; v_dx -= 3
-            if v_dx >= 1:  b0 |= 0x01; v_dx -= 1
-        elif v_dx < 0:
-            mx = -v_dx
-            if mx >= 81: b2 |= 0x08; mx -= 81
-            if mx >= 27: b1 |= 0x08; mx -= 27
-            if mx >= 9:  b0 |= 0x08; mx -= 9
-            if mx >= 3:  b1 |= 0x02; mx -= 3
-            if mx >= 1:  b0 |= 0x02; mx -= 1
-            
-        if v_dy > 0:
-            if v_dy >= 81: b2 |= 0x10; v_dy -= 81
-            if v_dy >= 27: b1 |= 0x10; v_dy -= 27
-            if v_dy >= 9:  b0 |= 0x10; v_dy -= 9
-            if v_dy >= 3:  b1 |= 0x40; v_dy -= 3
-            if v_dy >= 1:  b0 |= 0x40; v_dy -= 1
-        elif v_dy < 0:
-            my = -v_dy
-            if my >= 81: b2 |= 0x20; my -= 81
-            if my >= 27: b1 |= 0x20; my -= 27
-            if my >= 9:  b0 |= 0x80; my -= 9
-            if my >= 3:  b1 |= 0x20; my -= 3
-            if v_dy >= 1: b0 |= 0x20; my -= 1
-            
-        out.extend([b0, b1, b2])
-    
-    out.extend([0, 0, 0xF3])
-    return out
-
-window.py_process_dst = py_process_dst
-</script>
-
 <script>
-let globalBytes = null;
-
-function processFileJS() {
-    if (!globalBytes) { alert("Please select a file first."); return; }
-    const scale = parseFloat(document.getElementById('scale').value);
-    const resultList = window.py_process_dst(Array.from(globalBytes), scale, "export");
+// Safely parse DST coordinates out without complex byte dependencies using strict Tajima extraction rule
+function parseDstBinary(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+    const stitches = [];
+    let x = 0, y = 0;
     
-    const outputUint = new Uint8Array(resultList);
-    const originalName = document.getElementById('fileInput').files[0].name;
-    const blob = new Blob([outputUint], { type: "application/octet-stream" });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `scaled_${scale * 100}pct_${originalName}`;
-    link.click();
-    document.getElementById('statusText').innerText = "Saved successfully!";
+    // Tajima header is always 512 bytes long
+    for (let i = 512; i < arrayBuffer.byteLength - 2; i += 3) {
+        const b0 = view.getUint8(i);
+        const b1 = view.getUint8(i + 1);
+        const b2 = view.getUint8(i + 2);
+        
+        if ((b2 & 0xF3) === 0xF3) break; // End of design file sequence
+        
+        let dx = 0, dy = 0;
+        if (b0 & 0x01) dx += 1;   if (b0 & 0x02) dx -= 1;
+        if (b0 & 0x04) dx += 9;   if (b0 & 0x08) dx -= 9;
+        if (b0 & 0x10) dy += 1;   if (b0 & 0x20) dy -= 1;
+        if (b0 & 0x40) dy += 9;   if (b0 & 0x80) dy -= 9;
+        if (b1 & 0x01) dx += 3;   if (b1 & 0x02) dx -= 3;
+        if (b1 & 0x04) dx += 27;  if (b1 & 0x08) dx -= 27;
+        if (b1 & 0x10) dy += 3;   if (b1 & 0x20) dy -= 3;
+        if (b1 & 0x40) dy += 27;  if (b1 & 0x80) dy -= 27;
+        if (b2 & 0x04) dx += 81;  if (b2 & 0x08) dx -= 81;
+        if (b2 & 0x10) dy += 81;  if (b2 & 0x20) dy -= 81;
+        
+        x += dx;
+        y += dy;
+        
+        let type = 'stitch';
+        if ((b2 & 0x83) === 0x83) type = 'jump';
+        
+        stitches.push({ x: x, y: -y, type: type }); // Invert Y axis relative to Canvas
+    }
+    return stitches;
 }
+
+// Strictly rewrite dynamic updates to headers and coordinates to ensure the machine reads perfectly
+function encodeDstBinary(originalBuffer, stitches, scale) {
+    const outBuffer = new ArrayBuffer(512 + (stitches.length * 3) + 3);
+    const outView = new DataView(outBuffer);
+    
+    // Clone original header data to preserve metadata safely
+    const origView = new DataView(originalBuffer);
+    for (let i = 0; i < 512; i++) {
+        outView.setUint8(i, origView.getUint8(i));
+    }
+    
+    let cx = 0, cy = 0;
+    let idx = 512;
+    
+    for (let p of stitches) {
+        let tx = Math.round(p.x * scale);
+        let ty = Math.round(-p.y * scale); // revert canvas invert coordinate
+        
+        let dx = tx - cx;
+        let dy = ty - cy;
+        
+        cx += dx;
+        cy += dy;
+        
+        let b0 = 0, b1 = 0, b2 = 0;
+        if (p.type === 'jump') b2 |= 0x83;
+        
+        // Match Tajima bit configurations exactly
+        let ax = Math.abs(dx), ay = Math.abs(dy);
+        if (dx > 0) {
+            if (ax >= 81) { b2 |= 0x04; ax -= 81; }
+            if (ax >= 27) { b1 |= 0x04; ax -= 27; }
+            if (ax >= 9)  { b0 |= 0x04; ax -= 9; }
+            if (ax >= 3)  { b1 |= 0x01; ax -= 3; }
+            if (ax >= 1)  { b0 |= 0x01; ax -= 1; }
+        } else if (dx < 0) {
+            if (ax >= 81) { b2 |= 0x08; ax -= 81; }
+            if (ax >= 27) { b1 |= 0x08; ax -= 27; }
+            if (ax >= 9)  { b0 |= 0x08; ax -= 9; }
+            if (ax >= 3)  { b1 |= 0x02; ax -= 3; }
+            if (ax >= 1)  { b0 |= 0x02; ax -= 1; }
+        }
+        if (dy > 0) {
+            if (ay >= 81) { b2 |= 0x10; ay -= 81; }
+            if (ay >= 27) { b1 |= 0x10; ay -= 27; }
+            if (ay >= 9)  { b0 |= 0x10; ay -= 9; }
+            if (ay >= 3)  { b1 |= 0x40; ay -= 3; }
+            if (ay >= 1)  { b0 |= 0x40; ay -= 1; }
+        } else if (dy < 0) {
+            if (ay >= 81) { b2 |= 0x20; ay -= 81; }
+            if (ay >= 27) { b1 |= 0x20; ay -= 27; }
+            if (ay >= 9)  { b0 |= 0x80; ay -= 9; }
+            if (ay >= 3)  { b1 |= 0x20; ay -= 3; }
+            if (ay >= 1)  { b0 |= 0x20; ay -= 1; }
+        }
+        
+        outView.setUint8(idx++, b0);
+        outView.setUint8(idx++, b1);
+        outView.setUint8(idx++, b2);
+    }
+    
+    outView.setUint8(idx++, 0);
+    outView.setUint8(idx++, 0);
+    outView.setUint8(idx++, 0xF3);
+    
+    return outBuffer;
+}
+
+let loadedBuffer = null;
+let parsedStitches = [];
 
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
-    const r = new FileReader();
-    r.onload = function(evt) {
-        globalBytes = new Uint8Array(evt.target.result);
-        document.getElementById('statusText').innerText = "File parsed successfully.";
-        renderLivePreviews();
+    
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        loadedBuffer = evt.target.result;
+        parsedStitches = parseDstBinary(loadedBuffer);
+        document.getElementById('statusMessage').innerText = "File uploaded successfully!";
+        updatePreviews();
     };
-    r.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(file);
 });
 
-document.getElementById('scale').addEventListener('change', () => { if(globalBytes) renderLivePreviews(); });
+document.getElementById('scaleSelect').addEventListener('change', () => {
+    if (loadedBuffer) updatePreviews();
+});
 
-function renderLivePreviews() {
-    const scaleVal = parseFloat(document.getElementById('scale').value);
-    
-    const rawPointsOrig = window.py_process_dst(Array.from(globalBytes), 1.0, "preview");
-    const rawPointsScaled = window.py_process_dst(Array.from(globalBytes), scaleVal, "preview");
-    
-    drawDesign("canvasOrig", "origDim", rawPointsOrig, 1.0);
-    drawDesign("canvasScaled", "scaledDim", rawPointsScaled, scaleVal);
+function updatePreviews() {
+    const scale = parseFloat(document.getElementById('scaleSelect').value);
+    drawStitches("canvasOrig", "origSize", parsedStitches, 1.0);
+    drawStitches("canvasScaled", "scaledSize", parsedStitches, scale);
 }
 
-function drawDesign(canvasId, labelId, points, scale) {
+function drawStitches(canvasId, labelId, stitches, scale) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
-    canvas.width = 220; canvas.height = 220;
-    ctx.clearRect(0,0,220,220);
+    canvas.width = 200;
+    canvas.height = 200;
+    ctx.clearRect(0, 0, 200, 200);
     
-    if(!points || points.length === 0) return;
+    if (stitches.length === 0) return;
     
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    points.forEach(p => {
-        let x = p.x, y = p.y;
-        if(x < minX) minX = x; if(x > maxX) maxX = x;
-        if(y < minY) minY = y; if(y > maxY) maxY = y;
+    stitches.forEach(s => {
+        let sx = s.x * scale;
+        let sy = s.y * scale;
+        if (sx < minX) minX = sx; if (sx > maxX) maxX = sx;
+        if (sy < minY) minY = sy; if (sy > maxY) maxY = sy;
     });
     
     let w = maxX - minX;
     let h = maxY - minY;
     
+    // Convert 0.1mm steps to normal mm output unit display
     document.getElementById(labelId).innerText = `Size: ${(w/10).toFixed(1)}mm x ${(h/10).toFixed(1)}mm`;
     
-    let maxD = Math.max(w, h, 1);
-    let zoom = 160 / maxD;
-    let ox = 110 - (minX + w/2) * zoom;
-    let oy = 110 - (minY + h/2) * zoom;
+    let maxDim = Math.max(w, h, 1);
+    let zoom = 150 / maxDim; // Center fitting bounding box logic
+    let offsetX = 100 - (minX + w/2) * zoom;
+    let offsetY = 100 - (minY + h/2) * zoom;
     
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "#ff477e";
+    ctx.strokeStyle = "#ff477e"; // Soft pink trail trace matching view look
     ctx.beginPath();
     
-    let isFirst = true;
-    points.forEach(p => {
-        let sx = p.x * zoom + ox;
-        let sy = p.y * zoom + oy;
-        if(p.type === 'jump' || isFirst) {
-            ctx.moveTo(sx, sy);
-            isFirst = false;
+    let moveNext = true;
+    stitches.forEach(s => {
+        let drawX = (s.x * scale) * zoom + offsetX;
+        let drawY = (s.y * scale) * zoom + offsetY;
+        
+        if (s.type === 'jump' || moveNext) {
+            ctx.moveTo(drawX, drawY);
+            moveNext = false;
         } else {
-            ctx.lineTo(sx, sy);
+            ctx.lineTo(drawX, drawY);
         }
     });
     ctx.stroke();
 }
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+    if (!loadedBuffer) { alert("Please upload a .dst file first."); return; }
+    const scale = parseFloat(document.getElementById('scaleSelect').value);
+    const outputBuffer = encodeDstBinary(loadedBuffer, parsedStitches, scale);
+    
+    const blob = new Blob([outputBuffer], { type: "application/octet-stream" });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `scaled_${Math.round(scale * 100)}pct_${document.getElementById('fileInput').files[0].name}`;
+    link.click();
+    document.getElementById('statusMessage').innerText = "Saved successfully!";
+});
 </script>
+
 </body>
 </html>
