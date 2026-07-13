@@ -12,26 +12,42 @@
         input[type="number"], button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid #d1d5db; box-sizing: border-box; font-size: 16px; font-weight: 600; }
         button { background: #2563eb; color: white; border: none; cursor: pointer; transition: background 0.2s; }
         button:hover { background: #1d4ed8; }
-        .input-group { text-align: left; margin-bottom: 5px; }
-        label { font-size: 14px; font-weight: 500; color: #374151; }
+        
+        /* Modern Switch Styling */
+        .toggle-container { display: flex; align-items: center; justify-content: space-between; margin: 20px 0; padding: 12px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
+        .toggle-label { font-size: 14px; font-weight: 600; color: #374151; text-align: left; max-width: 75%; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #d1d5db; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #2563eb; }
+        input:checked + .slider:before { transform: translateX(24px); }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>🧵 Smart PES Density Adjuster</h2>
-    <p style="font-size: 13px; color: #6b7280; margin-top: -10px;">Adjust density count while keeping design dimensions perfect.</p>
+    <p style="font-size: 13px; color: #6b7280; margin-top: -10px;">Adjust density seamlessly without ruining embroidery patterns.</p>
     
     <form action="/convert" method="POST" enctype="multipart/form-data">
         <input type="file" name="file" accept=".pes" required>
         
-        <div class="input-group">
-            <label for="density">Stitch Adjustment Percentage (-100 to 100):</label>
+        <div style="text-align: left; margin-bottom: 4px;">
+            <label style="font-size: 14px; font-weight: 500; color: #374151;">Stitch Adjustment Percentage (-100 to 100):</label>
         </div>
-        <!-- Numerical typing engine input with responsive styling placeholders -->
-        <input type="number" id="density" name="density" min="-100" max="100" value="-20" placeholder="e.g. -20 for 20% less stitches" required>
+        <input type="number" name="density" min="-100" max="100" value="-20" placeholder="e.g. -20 for 20% less stitches" required>
 
-        <button type="submit">Modify Density & Download</button>
+        <!-- Dynamic Size Alignment Toggle Switch -->
+        <div class="toggle-container">
+            <span class="toggle-label">Scale overall design size along with stitch changes</span>
+            <label class="switch">
+                <input type="checkbox" name="scale_size">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <button type="submit">Process & Download File</button>
     </form>
 </div>
 
